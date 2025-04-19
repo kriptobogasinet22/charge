@@ -1,6 +1,18 @@
 import { getCoinPrices, convertCryptoToTRY, convertTRYToCrypto } from "./crypto"
 import type { TelegramUpdate, TelegramMessage, InlineKeyboardMarkup } from "@/types"
 
+// Kullanıcı durumlarını takip etmek için
+interface UserState {
+  waitingFor?: {
+    action: "convert"
+    fromCurrency: string
+    toCurrency: string
+  }
+}
+
+// Kullanıcı durumlarını saklamak için basit bir nesne
+const userStates: Record<number, UserState> = {}
+
 const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN
 const SUPPORTED_COINS = ["BTC", "USDT", "TRX", "XMR", "DOGE"]
 
@@ -12,18 +24,61 @@ export async function handleUpdate(update: TelegramUpdate) {
   }
 }
 
+// handleMessage fonksiyonunu güncelleyelim
 async function handleMessage(message: TelegramMessage) {
   const chatId = message.chat.id
   const text = message.text?.toLowerCase()
+  const isGroup = message.chat.type === "group" || message.chat.type === "supergroup"
 
   if (!text) return
 
+  // Kullanıcı durumunu kontrol et
+  const userState = userStates[chatId]
+  if (userState?.waitingFor?.action === "convert") {
+    // Kullanıcı bir dönüşüm için değer giriyor
+    const amount = Number.parseFloat(text)
+    if (!isNaN(amount)) {
+      const { fromCurrency, toCurrency } = userState.waitingFor
+      await handleConversion(chatId, amount, fromCurrency, toCurrency)
+      // Durumu temizle
+      delete userStates[chatId]
+    } else {
+      await sendMessage(chatId, "Geçersiz miktar. Lütfen sayısal bir değer girin.")
+    }
+    return
+  }
+
+  // Grup içinde sadece /convert komutunu işle
+  if (isGroup) {
+    if (text.startsWith("/convert")) {
+      const parts = text.split(" ")
+      if (parts.length === 4) {
+        const amount = Number.parseFloat(parts[1])
+        const fromCurrency = parts[2].toUpperCase()
+        const toCurrency = parts[3].toUpperCase()
+
+        if (!isNaN(amount)) {
+          await handleConversion(chatId, amount, fromCurrency, toCurrency)
+        } else {
+          await sendMessage(chatId, "Geçersiz miktar. Lütfen sayısal bir değer girin.")
+        }
+      } else {
+        await sendMessage(
+          chatId,
+          "Doğru format: /convert [miktar] [kaynak para birimi] [hedef para birimi]\nÖrnek: /convert 100 TRY BTC",
+        )
+      }
+    }
+    // Grup içinde başka komutları işleme
+    return
+  }
+
+  // Özel mesajlarda tüm komutları işle
   if (text === "/start" || text === "/menu") {
     await sendMainMenu(chatId)
   } else if (text.startsWith("/convert")) {
     const parts = text.split(" ")
     if (parts.length === 4) {
-      // Format: /convert 100 try btc
       const amount = Number.parseFloat(parts[1])
       const fromCurrency = parts[2].toUpperCase()
       const toCurrency = parts[3].toUpperCase()
@@ -42,10 +97,12 @@ async function handleMessage(message: TelegramMessage) {
   }
 }
 
+// handleCallbackQuery fonksiyonunu güncelleyelim
 async function handleCallbackQuery(callbackQuery: any) {
   const chatId = callbackQuery.message.chat.id
   const messageId = callbackQuery.message.message_id
   const data = callbackQuery.data
+  const isPrivate = callbackQuery.message.chat.type === "private"
 
   if (data === "prices") {
     await sendCryptoPrices(chatId)
@@ -53,10 +110,38 @@ async function handleCallbackQuery(callbackQuery: any) {
     await sendConversionMenu(chatId)
   } else if (data.startsWith("convert_to_try_")) {
     const coin = data.replace("convert_to_try_", "")
-    await sendConversionPrompt(chatId, coin, "TRY")
+
+    if (isPrivate) {
+      // Özel mesajlarda direkt değer sor
+      userStates[chatId] = {
+        waitingFor: {
+          action: "convert",
+          fromCurrency: coin,
+          toCurrency: "TRY",
+        },
+      }
+      await sendMessage(chatId, `Lütfen TL'ye dönüştürmek istediğiniz ${coin} miktarını girin:`)
+    } else {
+      // Gruplarda komut kullanımını anlat
+      await sendConversionPrompt(chatId, coin, "TRY")
+    }
   } else if (data.startsWith("convert_from_try_")) {
     const coin = data.replace("convert_from_try_", "")
-    await sendConversionPrompt(chatId, "TRY", coin)
+
+    if (isPrivate) {
+      // Özel mesajlarda direkt değer sor
+      userStates[chatId] = {
+        waitingFor: {
+          action: "convert",
+          fromCurrency: "TRY",
+          toCurrency: coin,
+        },
+      }
+      await sendMessage(chatId, `Lütfen ${coin}'a dönüştürmek istediğiniz TL miktarını girin:`)
+    } else {
+      // Gruplarda komut kullanımını anlat
+      await sendConversionPrompt(chatId, "TRY", coin)
+    }
   } else if (data === "main_menu") {
     await sendMainMenu(chatId)
   }
@@ -67,6 +152,14 @@ async function handleCallbackQuery(callbackQuery: any) {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ callback_query_id: callbackQuery.id }),
   })
+}
+
+// sendConversionPrompt fonksiyonunu güncelleyelim
+async function sendConversionPrompt(chatId: number | string, fromCurrency: string, toCurrency: string) {
+  await sendMessage(
+    chatId,
+    `Lütfen dönüştürmek istediğiniz ${fromCurrency} miktarını girin.\n\nÖrnek: /convert 100 ${fromCurrency} ${toCurrency}`,
+  )
 }
 
 async function sendMainMenu(chatId: number | string) {
@@ -153,13 +246,6 @@ async function sendConversionMenu(chatId: number | string) {
   }
 
   await sendMessage(chatId, "🔄 *Para Çevirici*\n\nLütfen yapmak istediğiniz dönüşüm işlemini seçin:", keyboard)
-}
-
-async function sendConversionPrompt(chatId: number | string, fromCurrency: string, toCurrency: string) {
-  await sendMessage(
-    chatId,
-    `Lütfen dönüştürmek istediğiniz ${fromCurrency} miktarını girin.\n\nÖrnek: /convert 100 ${fromCurrency} ${toCurrency}`,
-  )
 }
 
 async function handleConversion(chatId: number | string, amount: number, fromCurrency: string, toCurrency: string) {
