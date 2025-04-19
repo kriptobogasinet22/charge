@@ -79,7 +79,7 @@ async function sendMainMenu(chatId: number | string) {
 
   await sendMessage(
     chatId,
-    "🤖 *NİKEL CHANGE OFİS*\n\nMerhaba! Kripto para fiyatlarını görmek veya dönüşüm yapmak için aşağıdaki menüyü kullanabilirsiniz.",
+    "🤖 *SafeMoneyRobot*\n\nMerhaba! Kripto para fiyatlarını görmek veya dönüşüm yapmak için aşağıdaki menüyü kullanabilirsiniz.",
     keyboard,
   )
 }
@@ -97,7 +97,19 @@ async function sendCryptoPrices(chatId: number | string) {
       }
     }
 
-    message += "\n_Son güncelleme: " + new Date().toLocaleString("tr-TR") + "_"
+    message +=
+      "\n_Son güncelleme: " +
+      new Intl.DateTimeFormat("tr-TR", {
+        timeZone: "Europe/Istanbul",
+        day: "2-digit",
+        month: "2-digit",
+        year: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
+        second: "2-digit",
+        hour12: false,
+      }).format(new Date()) +
+      "_"
 
     const keyboard: InlineKeyboardMarkup = {
       inline_keyboard: [
