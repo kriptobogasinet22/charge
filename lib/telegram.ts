@@ -39,7 +39,7 @@ async function handleMessage(message: TelegramMessage) {
     const amount = Number.parseFloat(text)
     if (!isNaN(amount)) {
       const { fromCurrency, toCurrency } = userState.waitingFor
-      await handleConversion(chatId, amount, fromCurrency, toCurrency)
+      await handleConversion(chatId, amount, fromCurrency, toCurrency, isGroup)
       // Durumu temizle
       delete userStates[chatId]
     } else {
@@ -58,7 +58,7 @@ async function handleMessage(message: TelegramMessage) {
         const toCurrency = parts[3].toUpperCase()
 
         if (!isNaN(amount)) {
-          await handleConversion(chatId, amount, fromCurrency, toCurrency)
+          await handleConversion(chatId, amount, fromCurrency, toCurrency, isGroup)
         } else {
           await sendMessage(chatId, "Geçersiz miktar. Lütfen sayısal bir değer girin.")
         }
@@ -84,7 +84,7 @@ async function handleMessage(message: TelegramMessage) {
       const toCurrency = parts[3].toUpperCase()
 
       if (!isNaN(amount)) {
-        await handleConversion(chatId, amount, fromCurrency, toCurrency)
+        await handleConversion(chatId, amount, fromCurrency, toCurrency, isGroup)
       } else {
         await sendMessage(chatId, "Geçersiz miktar. Lütfen sayısal bir değer girin.")
       }
@@ -248,7 +248,15 @@ async function sendConversionMenu(chatId: number | string) {
   await sendMessage(chatId, "🔄 *Para Çevirici*\n\nLütfen yapmak istediğiniz dönüşüm işlemini seçin:", keyboard)
 }
 
-async function handleConversion(chatId: number | string, amount: number, fromCurrency: string, toCurrency: string) {
+// handleConversion fonksiyonunu güncelleyelim - butonları sadece özel mesajlarda göstersin
+
+async function handleConversion(
+  chatId: number | string,
+  amount: number,
+  fromCurrency: string,
+  toCurrency: string,
+  isGroup = false,
+) {
   try {
     let result: number
     let message: string
@@ -263,14 +271,19 @@ async function handleConversion(chatId: number | string, amount: number, fromCur
       message = "Desteklenmeyen para birimi. Lütfen TRY ve desteklenen kripto paralar arasında dönüşüm yapın."
     }
 
-    const keyboard: InlineKeyboardMarkup = {
-      inline_keyboard: [
-        [{ text: "🔄 Başka Bir Dönüşüm", callback_data: "convert_menu" }],
-        [{ text: "⬅️ Ana Menü", callback_data: "main_menu" }],
-      ],
+    // Sadece özel mesajlarda butonları göster
+    if (!isGroup) {
+      const keyboard: InlineKeyboardMarkup = {
+        inline_keyboard: [
+          [{ text: "🔄 Başka Bir Dönüşüm", callback_data: "convert_menu" }],
+          [{ text: "⬅️ Ana Menü", callback_data: "main_menu" }],
+        ],
+      }
+      await sendMessage(chatId, message, keyboard)
+    } else {
+      // Grup içinde sadece mesajı gönder, buton yok
+      await sendMessage(chatId, message)
     }
-
-    await sendMessage(chatId, message, keyboard)
   } catch (error) {
     console.error("Error converting currency:", error)
     await sendMessage(chatId, "Dönüşüm yapılırken bir hata oluştu. Lütfen daha sonra tekrar deneyin.")
