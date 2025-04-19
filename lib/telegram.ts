@@ -79,7 +79,7 @@ async function sendMainMenu(chatId: number | string) {
 
   await sendMessage(
     chatId,
-    "🤖 *SafeMoneyRobot*\n\nMerhaba! Kripto para fiyatlarını görmek veya dönüşüm yapmak için aşağıdaki menüyü kullanabilirsiniz.",
+    "🤖 *NİKEL CHANGE OFİS*\n\nMerhaba! Kripto para fiyatlarını görmek veya dönüşüm yapmak için aşağıdaki menüyü kullanabilirsiniz.",
     keyboard,
   )
 }
